@@ -1,0 +1,22 @@
+# Simulation / tool output
+xcelium.d/
+*.shm/
+.simvision/
+cov_work/
+logs/
+regression_logs/
+fv/
+*.log
+*.history
+*.key
+*.tstamp
+*.trn
+*.dsn
+*.vcd
+cds.lib
+hdl.var
+gui_probe.tcl
+# Genus
+genus.*
+*.cmd
+build/

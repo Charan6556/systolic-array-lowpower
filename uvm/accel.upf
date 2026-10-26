@@ -1,0 +1,41 @@
+# IEEE 1801 (UPF) power intent for the matmul accelerator core.
+# Power domains: everything always-on except the PE array
+
+create_power_domain PD_AON   -include_scope
+create_power_domain PD_ARRAY -elements {U_ARRAY}
+
+# Supplies
+create_supply_port VDD
+create_supply_port VSS
+create_supply_net  VDD
+create_supply_net  VSS
+create_supply_net  VDD_ARR
+connect_supply_net VDD -ports VDD
+connect_supply_net VSS -ports VSS
+
+create_supply_set SS_AON -function {power VDD}     -function {ground VSS}
+create_supply_set SS_ARR -function {power VDD_ARR} -function {ground VSS}
+associate_supply_set SS_AON -handle PD_AON.primary
+associate_supply_set SS_ARR -handle PD_ARRAY.primary
+
+# Power switch: VDD -> VDD_ARR, controlled by lp_pwr_en
+create_power_switch SW_ARR -domain PD_ARRAY \
+  -input_supply_port  {vin  VDD} \
+  -output_supply_port {vout VDD_ARR} \
+  -control_port       {ctrl lp_pwr_en} \
+  -on_state           {on_s  vin {ctrl}} \
+  -off_state          {off_s {!ctrl}}
+
+# Isolation: clamp array outputs (c_out) to 0 while lp_iso_en is high
+set_isolation ISO_ARR -domain PD_ARRAY \
+  -applies_to outputs \
+  -clamp_value 0 \
+  -isolation_supply_set SS_AON \
+  -isolation_signal lp_iso_en \
+  -isolation_sense high
+
+# Retention: keep the PE registers (accumulators) across power-down
+set_retention RET_ARR -domain PD_ARRAY \
+  -retention_supply_set SS_AON \
+  -save_signal    {lp_save high} \
+  -restore_signal {lp_restore high}
