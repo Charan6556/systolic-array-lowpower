@@ -5,9 +5,9 @@ A 4×4 output-stationary systolic array (16 INT8 MAC units, 32-bit accumulators)
 - **UVM verification environment**: AXI4-Lite agent, scoreboard with reference model, constrained-random stimulus
 - **Low-power design**: IEEE 1801 (UPF) power intent that puts the PE array in a switchable power domain, with isolation and retention, plus an RTL power controller driven by an AXI register
 - **Power-aware verification** in Cadence Xcelium (`-lps_1801`), with SVA checks on the power sequence and bug-injection tests
-- **Logic synthesis** in Cadence Genus on SKY130 HD at 250 MHz
+- **Logic synthesis** in Cadence Genus on SKY130 HD with a 4 ns clock constraint (250 MHz)
 
-![Power architecture](docs/power_architecture.png)
+![Hand-drawn power-domain architecture](docs/hand_drawn_architecture.png)
 
 ---
 
@@ -56,7 +56,7 @@ Unmapped addresses return SLVERR. A START issued while the array is not fully on
 | Retention | PD_ARRAY registers saved on `lp_save`, restored on `lp_restore`, shadow on SS_AON. Needed for ACCUMULATE mode across a power cycle |
 | Level shifters | Not needed (single voltage) |
 
-**Why the array:** in synthesis the PE array is **71% of the core area** (see below), so it holds most of the logic that would leak while idle. The C results live in the always-on output buffer, so they stay readable while the array is off.
+The PE array accounts for 71.4% of the core cell area in the hierarchy-preserving synthesis run. It is the switchable domain; the input and output buffers remain powered. Stored C results can therefore be read while the array is off. Area share alone does not establish leakage-power savings.
 
 ### Power controller FSM (`rtl/matmul_accelerator.sv`)
 
@@ -108,9 +108,15 @@ All runs: Cadence Xcelium 26.03, seed 1.
 
 ![Low-power results](docs/lowpower_test_results.png)
 
-**What the bug runs show:**
-- With isolation missing, X from the powered-off array reached the always-on side, but no C result changed. **Only the assertions caught it.**
-- With restore missing, the accumulators came back as X. Both the assertions (protocol) and the scoreboard (data) caught it, which confirms retention is what makes accumulate mode work across a power cycle.
+### AXI4-Lite waveform
+
+SimVision capture showing matrix writes, the START write, computation, STATUS polling, and C-result reads.
+
+![AXI4-Lite transactions and accelerator control signals in SimVision](docs/simvision_axi_waveform.png)
+
+The two injected faults exercise different checks:
+- With isolation missing, X from the powered-off array reached the always-on side, but no C result changed. The assertions detected the sequencing violation; the scoreboard reported no result mismatches.
+- With restore missing, the accumulators came back as X. Both the assertions (protocol) and the scoreboard (data) caught it, demonstrating the need to restore accumulator state for this accumulate-after-power-cycle test.
 
 The bugs are enabled with `+define+LP_BUG_NO_ISO` / `LP_BUG_NO_RESTORE` (`` `ifndef `` blocks in the power FSM). Without a define, the RTL is unchanged.
 
@@ -137,6 +143,10 @@ Core (`matmul_accelerator`, with the power controller), 4 ns clock (250 MHz). Sc
 | Cell area | 96,093 µm² |
 | Power (vectorless estimate) | 40.8 mW |
 
+Genus QoR report for the flat synthesis run:
+
+![Genus timing, cell count, and area report](docs/genus_qor.png)
+
 Area by block, from a hierarchy-preserving run (`synth/synth_hier.tcl`, total 99,668 µm²):
 
 | Block | Area (µm²) | Share |
@@ -147,6 +157,16 @@ Area by block, from a hierarchy-preserving run (`synth/synth_hier.tcl`, total 99
 | U_FEEDER | 751 | 0.8% |
 | U_CONTROLLER | 353 | 0.4% |
 | Top-level logic (power FSM, START/write gating) | ~248 | ~0.25% |
+
+![Genus hierarchical area report](docs/genus_area_by_block.png)
+
+### Synthesis schematic
+
+Core hierarchy as displayed in Genus:
+
+![Accelerator core schematic in Genus](docs/genus_schematic_core.png)
+
+[View the PE-array schematic](docs/genus_schematic_pe_array.png).
 
 Critical path: compute controller state → data feeder → input buffer read → PE carry-save adder tree → accumulator.
 
