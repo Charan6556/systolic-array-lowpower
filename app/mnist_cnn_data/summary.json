@@ -1,0 +1,14 @@
+{
+  "float_acc_10k": 0.9764999747276306,
+  "int8_acc_10k": 0.9757,
+  "int8_acc_first100": 1.0,
+  "float_int8_agreement_first100": 1.0,
+  "M1": 33088,
+  "M2": 32130,
+  "SHIFT": 24,
+  "max_abs_acc": [
+    64199,
+    64733,
+    59346
+  ]
+}
