@@ -141,7 +141,7 @@ A small CNN runs on the accelerator. The testbench (`tb/tb_mnist.sv`) acts as th
 - [Follow one number from the terminal, through the systolic array, and back](https://charan6556.github.io/systolic-array-lowpower/pipeline.html): drag left to right
 - [Step-by-step walkthrough with real values](https://charan6556.github.io/systolic-array-lowpower/): one pixel to one prediction in 8 steps
 
-**Demo video:** [hand-drawn digits classified by the accelerator RTL](docs/media/mnist_live_demo.mp4)
+**Demo video:** [hand-drawn digits classified by the accelerator RTL](https://charan6556.github.io/systolic-array-lowpower/media/mnist_live_demo.mp4)
 
 ![CNN to hardware flow](docs/media/cnn_to_hardware_flow.png)
 
