@@ -6,6 +6,7 @@ A 4×4 output-stationary systolic array (16 INT8 MAC units, 32-bit accumulators)
 - **Low-power design**: IEEE 1801 (UPF) power intent that puts the PE array in a switchable power domain, with isolation and retention, plus an RTL power controller driven by an AXI register
 - **Power-aware verification** in Cadence Xcelium (`-lps_1801`), with SVA checks on the power sequence and bug-injection tests
 - **Logic synthesis** in Cadence Genus on SKY130 HD with a 4 ns clock constraint (250 MHz)
+- **A real workload**: an INT8 MNIST CNN runs on the accelerator RTL in Xcelium, bit-exact with a Python INT8 reference on 100/100 test images, plus a live demo where hand-drawn digits are classified in simulation
 
 ![Hand-drawn power-domain architecture](docs/hand_drawn_architecture.png)
 
@@ -132,6 +133,68 @@ The bugs are enabled with `+define+LP_BUG_NO_ISO` / `LP_BUG_NO_RESTORE` (`` `ifn
 
 ---
 
+## Application: INT8 MNIST CNN (Xcelium RTL simulation)
+
+A small CNN runs on the accelerator. The testbench (`tb/tb_mnist.sv`) acts as the CPU and drives the accelerator only through the AXI4-Lite register interface. Every multiply-accumulate runs on the RTL.
+
+**Interactive explainers** (open in a browser):
+- [Follow one number from the terminal, through the systolic array, and back](https://charan6556.github.io/systolic-array-lowpower/pipeline.html): drag left to right
+- [Step-by-step walkthrough with real values](https://charan6556.github.io/systolic-array-lowpower/): one pixel to one prediction in 8 steps
+
+**Demo video:** [hand-drawn digits classified by the accelerator RTL](docs/media/mnist_live_demo.mp4)
+
+![CNN to hardware flow](docs/media/cnn_to_hardware_flow.png)
+
+### Model and quantization
+
+| Item | Value |
+|---|---|
+| Network | Conv 3×3×8 → ReLU → MaxPool 2×2 → Conv 3×3×8 → ReLU → MaxPool 2×2 → Dense 200→10 |
+| Parameters | 2,674 |
+| MACs per image | ~120,400 (Conv1 48,672, Conv2 69,696, Dense 2,000) |
+| Training | Keras, 5 epochs on the 60K MNIST training set |
+| Quantization | Post-training static INT8: symmetric, one scale per layer, calibrated on 2,000 training images |
+| Requantization | Integer only: `clamp((acc · M + 2^23) >> 24, 0, 127)`; the clamp at 0 is the ReLU |
+| Accuracy, 10K test set (Python) | Float 97.6%, INT8 97.57% |
+
+### Who does what
+
+| Step | Where |
+|---|---|
+| All multiply-accumulates (Conv1, Conv2, Dense) | Accelerator RTL |
+| im2col, zero padding to multiples of 4 | Testbench |
+| 4×4 tiling: one START per K-step, ACCUMULATE set after the first, interrupt on completion, C read once per output tile | Testbench, using the hardware accumulate mode |
+| Bias, requantization, ReLU, max pooling, argmax | Testbench |
+
+### Checking
+
+Python exports the weights, the first 100 MNIST test images, and the integer reference output of every layer (`app/mnist_cnn_data/exp_*.hex`). The testbench compares the RTL result after each step: Conv1 accumulators, Conv1 after requant and pool, Conv2 accumulators, Conv2 after requant and pool, dense scores, and the predicted digit.
+
+### Results: first 100 MNIST test images
+
+| Metric | Result |
+|---|---|
+| Bit-exact vs Python INT8, every layer | 100 / 100 (0 mismatches) |
+| Correct vs label | 100 / 100 |
+| Accelerator runs per image | 2,280 (Conv1 1,014, Conv2 1,116, Dense 150) |
+| Cycles per image | 126,503 (average) |
+
+![100-image summary](docs/media/summary_100.png)
+
+The first 100 test images are all classified correctly; the model's accuracy on the full test set is 97.57%.
+
+### Hand-drawn digits
+
+`app/draw_digit.py` lets you draw a digit in the terminal with the mouse. It centers the drawing like MNIST, computes the same integer reference in plain Python (checked against the Colab answer key with `--selftest`), and writes the hex files. `./live_demo.sh` then runs each drawing on the RTL.
+
+| Correct: 3 | Misclassified: a 4 with a closed top is read as 9 |
+|---|---|
+| ![3 classified correctly](docs/media/demo_3_correct.png) | ![4 read as 9, still bit-exact](docs/media/demo_4_wrong.png) |
+
+The misclassified 4 is still bit-exact with the Python reference: the RTL computed exactly what the model specifies, and the error comes from the 2,674-parameter model. Per-layer bit-exact checking separates hardware errors from model errors.
+
+---
+
 ## Synthesis (Cadence Genus, SKY130 HD, tt 25 °C 1.8 V)
 
 Core (`matmul_accelerator`, with the power controller), 4 ns clock (250 MHz). Script: `synth/synth_simple.tcl`.
@@ -186,6 +249,11 @@ cd uvm
 
 cd ../synth
 genus -f synth_simple.tcl -log genus_lp
+
+cd ..                                  # MNIST CNN, from the repo root
+xrun -64bit -sv -timescale 1ns/1ps rtl/*.sv tb/tb_mnist.sv \
+     +incdir+app/mnist_cnn_data -top tb_mnist +DATA=app/mnist_cnn_data
+./live_demo.sh                         # draw digits and classify them on the RTL
 ```
 
 `filelist.f` expects `rtl/` next to `uvm/`.
@@ -199,13 +267,17 @@ genus -f synth_simple.tcl -log genus_lp
 - Retention covers the whole PD_ARRAY domain; only the 16 accumulators are actually needed (an area optimization not done here).
 - Power numbers are vectorless estimates, not from simulation activity.
 - No clock gating yet.
+- The MNIST results are RTL simulation (Xcelium, without UPF), not silicon or FPGA. The testbench performs im2col, requantization, pooling and argmax that a CPU would do; the accelerator performs the MACs.
+- MNIST throughput is limited by AXI4-Lite data movement: each 4×4 run needs 8 register writes, and each output tile 16 reads. No DMA.
 
 ## Repository layout
 
 ```
 rtl/     8 RTL files (power controller in matmul_accelerator.sv, PWR_CTRL in matmul_axil_top.sv)
 uvm/     UVM environment, power_sva.sv, accel.upf, run scripts
-tb/      Directed testbenches (original AXI-Lite tests, PE unit test)
+tb/      Directed testbenches (original AXI-Lite tests, PE unit test, tb_mnist.sv)
+app/     MNIST data and model files (mnist_cnn_data/), draw_digit.py
 synth/   Genus scripts and reports (flat and hierarchical)
-docs/    Diagrams and result screenshots
+docs/    Diagrams and result screenshots (MNIST media in docs/media/)
+live_demo.sh   Draw a digit -> Xcelium simulation -> prediction
 ```

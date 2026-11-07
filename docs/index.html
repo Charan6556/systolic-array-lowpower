@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One Number, Pixel to Hardware</title>
+<style>
+  :root { --bg:#ffffff; --card:#f7f6f3; --ink:#1d1d1f; --muted:#5f5e5a; --line:#d3d1c7;
+          --hw:#0f6e56; --hwbg:#e1f5ee; --sw:#534ab7; --swbg:#eeedfe; --hi:#ef9f27; --hibg:#faeeda; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; line-height:1.55; }
+  .wrap { max-width:1040px; margin:0 auto; padding:28px 16px 48px; }
+  h1 { font-size:28px; margin:0 0 4px; letter-spacing:-0.01em; }
+  .sub { color:var(--muted); margin:0 0 22px; font-size:16px; }
+  .steps { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:18px; }
+  .pill { border:1px solid var(--line); background:#fff; color:var(--muted); border-radius:999px;
+          padding:5px 12px; font-size:13px; cursor:pointer; }
+  .pill.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:24px;
+          display:grid; grid-template-columns: 1.15fr 1fr; gap:28px; align-items:start; min-height:470px; }
+  @media (max-width:820px) { .card { grid-template-columns:1fr; } }
+  .stepno { font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin:0 0 6px; }
+  h2 { font-size:23px; margin:0 0 12px; }
+  .text p { margin:0 0 12px; font-size:16px; }
+  .tag { display:inline-block; font-size:12px; font-weight:600; border-radius:6px; padding:2px 8px; margin-right:6px; }
+  .tag.hw { background:var(--hwbg); color:var(--hw); } .tag.sw { background:var(--swbg); color:var(--sw); }
+  .nav { display:flex; justify-content:space-between; margin-top:16px; }
+  button.btn { font-size:15px; padding:9px 18px; border-radius:10px; border:1px solid var(--line);
+               background:#fff; color:var(--ink); cursor:pointer; }
+  button.btn.primary { background:var(--ink); color:#fff; border-color:var(--ink); }
+  button.btn:disabled { opacity:.35; cursor:default; }
+  .vis, .text { min-width:0; }
+  .tw { max-width:100%; overflow-x:auto; }
+  .vis { display:flex; flex-direction:column; align-items:center; gap:14px; }
+  table.m { border-collapse:collapse; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:14px; }
+  table.m td { border:1px solid var(--line); padding:6px 9px; text-align:right; background:#fff; min-width:44px; }
+  table.m td.hi { background:var(--hibg); font-weight:700; }
+  table.m td.z { color:#b4b2a9; }
+  .cap { font-size:13px; color:var(--muted); text-align:center; }
+  .eq { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:15px; }
+  .big { font-size:34px; font-weight:700; font-family:ui-monospace, Menlo, Consolas, monospace; }
+  .row { display:flex; gap:14px; align-items:center; flex-wrap:wrap; justify-content:center; }
+  .op { font-size:26px; color:var(--muted); }
+  .prod { display:grid; grid-template-columns:repeat(3, auto); gap:4px 18px; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:14px; }
+  @media (max-width:520px) {
+    .card { padding:16px 12px; gap:20px; }
+    table.m { font-size:11px; } table.m td { padding:4px 3px; min-width:0; }
+    .vis .pe { grid-template-columns: 50px repeat(4, 62px); grid-template-rows: 44px repeat(4, 58px); gap:5px; }
+    .vis .pe .cell .acc { font-size:12px; } .vis .pe .cell .term { font-size:9px; }
+    .vis .pe .inA, .vis .pe .inB { font-size:10px; }
+  }
+  @media (max-width:520px) { .prod { grid-template-columns:repeat(2, auto); font-size:12px; gap:4px 12px; } .big { font-size:28px; } }
+  .prod span { opacity:0; transition:opacity .25s; } .prod span.show { opacity:1; }
+  .boxes { display:flex; align-items:center; gap:14px; flex-wrap:wrap; justify-content:center; }
+  .mbox { position:relative; border:2px solid var(--ink); border-radius:6px; background:#fff; }
+  .mbox .lab { position:absolute; top:-24px; left:50%; transform:translateX(-50%); white-space:nowrap; font-size:13px; font-weight:600; }
+  .mbox .dim { position:absolute; bottom:-22px; left:0; right:0; text-align:center; font-size:12px; color:var(--muted); }
+  .mbox .bar { position:absolute; left:0; right:0; height:6px; background:var(--hi); }
+  .pe { display:grid; grid-template-columns: 70px repeat(4, 86px); grid-template-rows: 56px repeat(4, 70px); gap:6px; }
+  .pe .cell { background:#fff; border:1.5px solid var(--hw); border-radius:10px; display:flex; flex-direction:column;
+              align-items:center; justify-content:center; font-family:ui-monospace, Menlo, Consolas, monospace; }
+  .pe .cell .acc { font-size:15px; font-weight:700; }
+  .pe .cell .term { font-size:11px; color:var(--muted); min-height:14px; }
+  .pe .cell.busy { background:var(--hwbg); }
+  .pe .cell.target { box-shadow:0 0 0 3px var(--hi); }
+  .pe .inA, .pe .inB { display:flex; align-items:center; justify-content:center; font-family:ui-monospace, Menlo, Consolas, monospace;
+              font-size:13px; color:var(--sw); font-weight:600; }
+  .ctrl { display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; font-size:14px; }
+  .ctrl button { font-size:13px; padding:5px 12px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; color:var(--ink); }
+  .ctrl button.on { background:var(--hw); color:#fff; border-color:var(--hw); }
+  .bars { width:100%; max-width:440px; }
+  .bars .b { display:grid; grid-template-columns:22px 1fr 70px; align-items:center; gap:10px; margin:4px 0; font-size:14px; }
+  .bars .track { position:relative; height:18px; }
+  .bars .fill { position:absolute; top:0; height:18px; border-radius:3px; background:#d3d1c7; }
+  .bars .fill.win { background:var(--hw); }
+  .bars .zero { position:absolute; top:-3px; bottom:-3px; width:1.5px; background:var(--ink); }
+  .note { font-size:13px; color:var(--muted); margin-top:18px; }
+  a { color:var(--hw); }
+  canvas { border-radius:8px; border:1px solid var(--line); max-width:100%; height:auto; }
+  .ok { color:var(--hw); font-weight:700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>One number, from a pixel to the hardware</h1>
+  <p class="sub">How a small INT8 CNN runs on my 4×4 systolic array accelerator, using real values from one handwritten 3.</p>
+  <div class="steps" id="steps"></div>
+  <div class="card">
+    <div class="vis" id="vis"></div>
+    <div class="text" id="text"></div>
+  </div>
+  <div class="nav">
+    <button class="btn" id="prev">← Back</button>
+    <button class="btn primary" id="next">Next →</button>
+  </div>
+  <p class="note">All values come from the trained INT8 model and the accelerator's answer-key files. Results are from Cadence Xcelium RTL simulation, not silicon or FPGA.
+    Code: <a href="https://github.com/Charan6556/systolic-array-lowpower">github.com/Charan6556/systolic-array-lowpower</a></p>
+</div>
+
+<script>
+const D = {"img": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 20, 73, 73, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 64, 126, 126, 126, 125, 81, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 66, 126, 126, 126, 126, 126, 126, 114, 35, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 126, 126, 72, 51, 53, 118, 126, 123, 64, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 90, 126, 83, 0, 0, 0, 30, 117, 126, 126, 81, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 127, 126, 21, 0, 0, 0, 0, 29, 96, 126, 126, 82, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 93, 126, 16, 0, 0, 0, 0, 0, 27, 118, 126, 126, 43, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 73, 126, 16, 0, 50, 95, 43, 43, 43, 73, 126, 126, 61, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 47, 126, 39, 20, 124, 126, 126, 126, 126, 126, 126, 126, 111, 42, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 46, 6, 17, 120, 126, 126, 126, 126, 126, 126, 126, 126, 126, 122, 44, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 37, 80, 89, 126, 126, 126, 126, 126, 126, 126, 126, 126, 104, 21, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 8, 8, 19, 19, 8, 8, 72, 121, 126, 126, 92, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 29, 0, 0, 0, 0, 0, 0, 0, 0, 29, 104, 126, 126, 91, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 38, 110, 123, 39, 0, 0, 0, 0, 0, 0, 0, 0, 6, 109, 126, 120, 36, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 45, 123, 126, 126, 28, 0, 0, 0, 0, 0, 0, 0, 0, 26, 125, 126, 95, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 58, 126, 126, 29, 0, 0, 0, 0, 0, 0, 0, 0, 49, 126, 126, 72, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 94, 126, 110, 79, 19, 0, 0, 0, 0, 55, 105, 123, 126, 126, 72, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 110, 123, 126, 125, 124, 124, 124, 124, 126, 126, 126, 126, 100, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 47, 91, 114, 126, 126, 126, 126, 126, 126, 97, 62, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 18, 69, 37, 63, 44, 18, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], "patch_y": 20, "patch_x": 15, "filt": [4, 57, -8, 96, 65, -2, 91, 90, 104], "crow": [-14956, -34234, -48588, -26624, 42818, 7864, 28660, 55626], "At": [[110, 79, 19, 123, 126, 125, 47, 91, 114, 0, 0, 0], [79, 19, 0, 126, 125, 124, 91, 114, 126, 0, 0, 0], [19, 0, 0, 125, 124, 124, 114, 126, 126, 0, 0, 0], [0, 0, 0, 124, 124, 124, 126, 126, 126, 0, 0, 0]], "Bt": [[0, 46, 69, 4], [58, 63, 35, 57], [-114, 85, 94, -8], [18, -45, 3, 96], [77, -19, 47, 65], [105, 38, 47, -2], [-63, -85, 67, 91], [79, 54, 19, 90], [127, 119, 46, 104], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], "parts": [[[4630, 6117, 12510, 16599], [3370, -839, 6494, 13495], [2250, -4751, 1686, 12076], [2232, -5580, 372, 11904]], [[27055, 3275, 16675, 20407], [25918, 758, 19966, 26418], [25340, -530, 21688, 29526], [24584, -1550, 22492, 30618]], [[14478, 13566, 5244, 11856], [16002, 14994, 5796, 13104], [16002, 14994, 5796, 13104], [16002, 14994, 5796, 13104]]], "Ct": [[46163, 22958, 34429, 48862], [45290, 14913, 32256, 53017], [43592, 9713, 29170, 54706], [42818, 7864, 28660, 55626]], "bias": -47, "M1": 33088, "SHIFT": 24, "pool_in": [[20, 14, 54706, 108], [20, 15, 55626, 110], [21, 14, 35346, 70], [21, 15, 38302, 75]], "pooled": 110, "scores": [-23080, -26538, -8344, 322, -25448, -2567, -20931, -22113, -4558, -18051], "pred": 3, "label": 3};
+const fmt = v => (v + 0).toLocaleString("en-US");
+const vis = document.getElementById("vis"), text = document.getElementById("text");
+let step = 0, timers = [];
+function clearTimers(){ timers.forEach(t => clearInterval(t)); timers.forEach(t => clearTimeout(t)); timers = []; }
+
+function digitCanvas(box) {
+  const c = document.createElement("canvas"), s = 12;
+  c.width = 28*s; c.height = 28*s;
+  const g = c.getContext("2d");
+  for (let i = 0; i < 784; i++) {
+    const v = Math.round(D.img[i] / 127 * 255);
+    g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect((i%28)*s, Math.floor(i/28)*s, s, s);
+  }
+  if (box) { g.strokeStyle = "#EF9F27"; g.lineWidth = 3; g.strokeRect(D.patch_x*s+1.5, D.patch_y*s+1.5, 3*s-3, 3*s-3); }
+  return c;
+}
+function table(rows, cls) {
+  const t = document.createElement("table"); t.className = "m";
+  rows.forEach((r, i) => { const tr = t.insertRow();
+    r.forEach((v, j) => { const td = tr.insertCell(); td.textContent = fmt(v);
+      const c = cls && cls(i, j, v); if (c) td.className = c; }); });
+  const w = document.createElement("div"); w.className = "tw"; w.append(t); return w;
+}
+const patch = [0,1,2].map(r => [0,1,2].map(c => D.img[(D.patch_y+r)*28 + D.patch_x + c]));
+const filt  = [0,1,2].map(r => D.filt.slice(r*3, r*3+3));
+
+const STEPS = [
+ { name:"Pixels", title:"A handwritten 3",
+   vis(){ vis.append(digitCanvas(false)); vis.append(cap("MNIST test image 18, 28 × 28 pixels")); },
+   text:`<p>To the network, this image is just <b>784 numbers</b>, one per pixel.</p>
+         <p>I scaled the pixels from 0–255 to <b>0–127</b> so they fit in signed INT8, the number format my accelerator multiplies.</p>
+         <p>Background pixels are 0. The pen stroke is close to 127.</p>` },
+
+ { name:"Window", title:"Look at one 3×3 window",
+   vis(){ vis.append(digitCanvas(true)); vis.append(table(patch, (i,j,v) => v === 0 ? "z" : "hi"));
+          vis.append(cap(`the window at row ${D.patch_y}, column ${D.patch_x}`)); },
+   text:`<p>The first layer, <b>Conv1</b>, slides a small 3×3 window across the whole image.</p>
+         <p>Here the window sits on the bottom stroke of the 3. The top row is background, the two lower rows are ink.</p>
+         <p>These nine numbers are all Conv1 sees at this position.</p>` },
+
+ { name:"Multiply-add", title:"Nine multiplies and one add",
+   vis(){
+     const r = div("row"); r.append(table(patch, (i,j,v) => v===0 ? "z" : "")); r.append(op("×"));
+     r.append(table(filt)); vis.append(r); vis.append(cap("window pixels × filter 7 weights (same positions)"));
+     const p = div("prod"); const spans = [];
+     for (let k = 0; k < 9; k++) { const s = document.createElement("span");
+       s.textContent = `${patch[Math.floor(k/3)][k%3]} × ${D.filt[k]} = ${fmt(patch[Math.floor(k/3)][k%3]*D.filt[k])}`; p.append(s); spans.push(s); }
+     vis.append(p);
+     const tot = div("big"); tot.textContent = ""; vis.append(tot);
+     let k = 0; const t = setInterval(() => { if (k < 9) spans[k++].classList.add("show");
+       else { tot.textContent = "sum = " + fmt(D.crow[7]); clearInterval(t); } }, 260); timers.push(t);
+   },
+   text:`<p><b>Filter 7</b> is one of the 8 patterns the model learned during training. Its 9 weights are in the second grid.</p>
+         <p>Multiply each pixel by the weight in the same position, then add the nine products.</p>
+         <p>The result, <b>55,626</b>, says how strongly this window matches the pattern. This multiply-add is exactly what one processing element (PE) in the accelerator does.</p>` },
+
+ { name:"Matrix", title:"The whole layer is one matrix multiply",
+   vis(){
+     const b = div("boxes");
+     b.append(mbox("A: patches", "676 × 12", 70, 230, 535/676));
+     b.append(op("×")); b.append(mbox("B: filters", "12 × 8", 56, 70, null));
+     b.append(op("=")); b.append(mbox("C: output", "676 × 8", 56, 230, 535/676));
+     vis.append(b);
+     const aRow = [...D.At[3]]; vis.append(spacer(10));
+     vis.append(table([aRow], (i,j,v) => j >= 9 ? "z" : (v ? "hi" : "")));
+     vis.append(cap("row 535 of A: the window from step 2, padded with three zeros"));
+     vis.append(table([D.crow], (i,j) => j === 7 ? "hi" : ""));
+     vis.append(cap("row 535 of C: that window scored by all 8 filters (filter 7 = 55,626)"));
+   },
+   text:`<p>Do the same for every window position and put each window's pixels in its own row. That gives matrix <b>A</b>: 676 rows, one per position.</p>
+         <p>The 8 filters become the columns of matrix <b>B</b>. Now a single multiply, <b>A × B</b>, computes all 5,408 Conv1 outputs at once.</p>
+         <p>I padded each row from 9 to 12 values with zeros so the matrices divide evenly into 4×4 tiles. Zeros add nothing, so the result doesn't change.</p>
+         <p><span class="tag sw">testbench</span>builds A (this step is called im2col)</p>` },
+
+ { name:"Tiles", title:"Cut the multiply into 4×4 tiles",
+   vis(){
+     const colr = ["#eeedfe","#e1f5ee","#faeeda"];
+     vis.append(cap("A tile: 4 patches (532–535) × 12 values"));
+     vis.append(table(D.At, (i,j) => "c" + Math.floor(j/4)));
+     vis.append(op("×"));
+     vis.append(cap("B tile: 12 weights × 4 filters (4–7)"));
+     vis.append(table(D.Bt, (i,j) => "c" + Math.floor(i/4)));
+     vis.querySelectorAll("td").forEach(td => { const m = td.className.match(/c(\d)/); if (m) td.style.background = colr[+m[1]]; });
+     vis.append(cap("each color = one accelerator run (4 columns of A with 4 rows of B)"));
+   },
+   text:`<p>The accelerator multiplies a 4×4 block by a 4×4 block in one run.</p>
+         <p>Our value sits in the output tile for <b>patches 532–535</b> and <b>filters 4–7</b>. Because the shared dimension is 12, that tile needs <b>three runs</b>, one for each colored chunk.</p>
+         <p>For each run the testbench sends 4 rows of A and 4 rows of B over AXI4-Lite, then writes START.</p>
+         <p><span class="tag sw">testbench</span>tiling and AXI writes <span class="tag hw">accelerator</span>the multiply</p>` },
+
+ { name:"Systolic array", title:"Inside the systolic array",
+   vis(){ systolic(); },
+   text:`<p>A values enter from the left and move one PE to the right every cycle. B values enter from the top and move down. Each row and column starts one cycle later than the one before, so matching pairs meet in the right PE.</p>
+         <p>Every PE keeps its own running sum. Runs 2 and 3 are started with <b>ACCUMULATE</b>, so the sums carry over instead of being cleared, and the result is read only once.</p>
+         <p>After run 3 the bottom-right PE holds <b>55,626</b>, the same number as step 3. This is the value the RTL produced in simulation.</p>
+         <p><span class="tag hw">accelerator</span>16 INT8 MACs, 12 cycles per run</p>` },
+
+ { name:"Back to INT8", title:"Back to INT8 for the next layer",
+   vis(){
+     const e = div("eq"); e.style.lineHeight = "2";
+     e.innerHTML = `${fmt(D.crow[7])} + bias (${D.bias}) = <b>${fmt(D.crow[7]+D.bias)}</b><br>
+       (${fmt(D.crow[7]+D.bias)} × ${fmt(D.M1)} + 2<sup>23</sup>) ≫ ${D.SHIFT} → <b>${D.pool_in[1][3]}</b><br>
+       clamp to 0…127 (ReLU) → <b>${D.pool_in[1][3]}</b>`;
+     vis.append(e); vis.append(spacer(6));
+     const pv = [[D.pool_in[0][3], D.pool_in[1][3]], [D.pool_in[2][3], D.pool_in[3][3]]];
+     const r = div("row"); r.append(table(pv, (i,j,v) => v === D.pooled ? "hi" : ""));
+     r.append(op("→")); const m = div("big"); m.textContent = D.pooled; r.append(m); vis.append(r);
+     vis.append(cap("2×2 max pool: keep the largest of four neighbors"));
+   },
+   text:`<p>The next layer needs INT8 input again, so the testbench shrinks each result back to 0–127.</p>
+         <p>It adds the bias, scales with an integer multiply and shift, and clamps. Clamping at 0 is the ReLU. No floating point anywhere.</p>
+         <p>Max pooling then keeps the strongest value in each 2×2 block, halving the image size.</p>
+         <p>Conv2 and the final dense layer follow the same pattern. One image takes <b>2,280 accelerator runs</b> in total.</p>
+         <p><span class="tag sw">testbench</span>bias, requant, ReLU, pooling</p>` },
+
+ { name:"Answer", title:"The answer: 3",
+   vis(){ bars(); },
+   text:`<p>The dense layer gives one score per digit. The highest score wins: <b>3</b>.</p>
+         <p>I checked the hardware against the Python INT8 model after every layer. Across the first 100 MNIST test images, the RTL matched the reference at every layer for all <b>100 of 100</b> images.</p>
+         <p><span class="ok">100 / 100 bit-exact</span> · 126,503 cycles per image · Cadence Xcelium RTL simulation</p>` },
+];
+
+function div(c){ const d = document.createElement("div"); d.className = c; return d; }
+function cap(t){ const p = div("cap"); p.textContent = t; return p; }
+function op(t){ const s = div("op"); s.textContent = t; return s; }
+function spacer(h){ const d = div(""); d.style.height = h + "px"; return d; }
+function mbox(lab, dim, w, h, hiFrac){
+  const b = div("mbox"); b.style.width = w + "px"; b.style.height = h + "px";
+  b.innerHTML = `<div class="lab">${lab}</div><div class="dim">${dim}</div>`;
+  if (hiFrac !== null) { const bar = div("bar"); bar.style.top = Math.round(hiFrac*(h-6)) + "px"; b.append(bar); }
+  b.style.margin = "26px 0 24px"; return b;
+}
+
+function systolic(){
+  let run = 0, cyc = 0, playing = null;
+  const ctrl = div("ctrl"), grid = div("pe"), info = cap("");
+  const runBtns = [0,1,2].map(r => { const b = document.createElement("button"); b.textContent = `run ${r+1}`;
+    b.onclick = () => { run = r; cyc = 0; draw(); }; ctrl.append(b); return b; });
+  const sl = document.createElement("input"); sl.type = "range"; sl.min = 0; sl.max = 9; sl.style.width = "140px";
+  sl.oninput = () => { cyc = +sl.value; draw(); };
+  const play = document.createElement("button"); play.textContent = "▶ play";
+  play.onclick = () => { if (playing) { clearInterval(playing); playing = null; play.textContent = "▶ play"; return; }
+    if (cyc >= 9) cyc = -1; play.textContent = "❚❚ pause";
+    playing = setInterval(() => { cyc++; if (cyc >= 9) { cyc = 9; clearInterval(playing); playing = null; play.textContent = "▶ play"; } draw(); }, 700);
+    timers.push(playing); };
+  ctrl.append(sl, play);
+  vis.append(ctrl, grid, info);
+  const Ak = (r,i,k) => D.At[i][4*r+k], Bk = (r,k,j) => D.Bt[4*r+k][j];
+  function draw(){
+    runBtns.forEach((b,i) => b.classList.toggle("on", i === run)); sl.value = cyc;
+    grid.innerHTML = "";
+    grid.append(div(""));
+    for (let j = 0; j < 4; j++) { const d = div("inB"); const k = cyc - j;
+      d.textContent = (k >= 0 && k < 4) ? `B ${Bk(run,k,j)} ↓` : "·"; grid.append(d); }
+    for (let i = 0; i < 4; i++) {
+      const a = div("inA"); const ka = cyc - i; a.textContent = (ka >= 0 && ka < 4) ? `A ${Ak(run,i,ka)} →` : "·"; grid.append(a);
+      for (let j = 0; j < 4; j++) {
+        let acc = 0; for (let r = 0; r < run; r++) acc += D.parts[r][i][j];
+        const kNow = cyc - i - j;
+        for (let k = 0; k <= Math.min(3, kNow); k++) acc += Ak(run,i,k) * Bk(run,k,j);
+        const c = div("cell" + ((kNow >= 0 && kNow < 4) ? " busy" : "") + ((i === 3 && j === 3) ? " target" : ""));
+        c.innerHTML = `<div class="acc">${fmt(acc)}</div><div class="term">${(kNow >= 0 && kNow < 4) ? Ak(run,i,kNow) + "×" + Bk(run,kNow,j) : ""}</div>`;
+        grid.append(c);
+      }
+    }
+    const done = (run === 2 && cyc === 9);
+    info.innerHTML = `run ${run+1} of 3 · compute cycle ${cyc+1} of 10` + (run > 0 ? " · started with ACCUMULATE" : " · sums start at 0") +
+      (done ? ` · <span class="ok">bottom-right PE = ${fmt(D.Ct[3][3])} ✓</span>` : "");
+  }
+  draw();
+}
+
+function bars(){
+  const wrap = div("bars"); const lo = Math.min(...D.scores), hi = Math.max(...D.scores);
+  const span = Math.max(1, Math.max(hi, 0) - Math.min(lo, 0)), z = (0 - Math.min(lo, 0)) / span * 100;
+  D.scores.forEach((s, d) => {
+    const win = d === D.pred;
+    const row = div("b"); row.innerHTML = `<div style="${win ? "color:var(--hw)" : ""}"><b>${d}</b></div>`;
+    const tr = div("track"); const f = div("fill" + (d === D.pred ? " win" : ""));
+    const x0 = Math.min(z, (s - Math.min(lo,0)) / span * 100), x1 = Math.max(z, (s - Math.min(lo,0)) / span * 100);
+    f.style.left = x0 + "%"; f.style.width = Math.max(win ? 3 : .5, x1 - x0) + "%"; tr.append(f);
+    const zl = div("zero"); zl.style.left = z + "%"; tr.append(zl);
+    row.append(tr); const v = div(""); v.style.textAlign = "right"; v.style.fontFamily = "ui-monospace, Menlo, monospace";
+    v.textContent = fmt(s); if (win) { v.style.color = "var(--hw)"; v.style.fontWeight = "700"; } row.append(v); wrap.append(row);
+  });
+  vis.append(wrap); vis.append(cap("dense layer scores for digits 0–9 (highest wins)"));
+}
+
+const stepsEl = document.getElementById("steps");
+STEPS.forEach((s, i) => { const p = document.createElement("button"); p.className = "pill"; p.textContent = `${i+1}. ${s.name}`;
+  p.onclick = () => go(i); stepsEl.append(p); });
+function go(i){
+  clearTimers(); step = i; vis.innerHTML = ""; const s = STEPS[i];
+  text.innerHTML = `<p class="stepno">Step ${i+1} of ${STEPS.length}</p><h2>${s.title}</h2>` + s.text;
+  s.vis();
+  [...stepsEl.children].forEach((p, k) => p.classList.toggle("on", k === i));
+  document.getElementById("prev").disabled = i === 0;
+  document.getElementById("next").disabled = i === STEPS.length - 1;
+}
+document.getElementById("prev").onclick = () => go(Math.max(0, step - 1));
+document.getElementById("next").onclick = () => go(Math.min(STEPS.length - 1, step + 1));
+document.addEventListener("keydown", e => { if (e.key === "ArrowRight") go(Math.min(STEPS.length-1, step+1));
+                                             if (e.key === "ArrowLeft") go(Math.max(0, step-1)); });
+go(0);
+</script>
+</body>
+</html>
