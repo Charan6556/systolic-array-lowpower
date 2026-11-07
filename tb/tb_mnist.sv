@@ -3,7 +3,7 @@
 // MNIST CNN testbench
 // Accelerator: all multiply-accumulates
 // Testbench: im2col, tiling, bias, requant, ReLU, pool, argmax
-// Every layer checked against the Python answer key (exp_*.hex)
+// Every layer checked against the Python answer key present in hex files (exp_*.hex)
 
 module tb_mnist;
 
