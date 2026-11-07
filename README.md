@@ -152,10 +152,25 @@ A small CNN runs on the accelerator. The testbench (`tb/tb_mnist.sv`) acts as th
 | Network | Conv 3×3×8 → ReLU → MaxPool 2×2 → Conv 3×3×8 → ReLU → MaxPool 2×2 → Dense 200→10 |
 | Parameters | 2,674 |
 | MACs per image | ~120,400 (Conv1 48,672, Conv2 69,696, Dense 2,000) |
-| Training | Keras, 5 epochs on the 60K MNIST training set |
-| Quantization | Post-training static INT8: symmetric, one scale per layer, calibrated on 2,000 training images |
+| Training | Keras with TensorFlow, Adam, sparse categorical cross-entropy from logits, 5 epochs, batch size 64, seed 42 |
+| Quantization | Post-training INT8 with symmetric per-layer weight scales, INT32 biases, and activation scales calibrated on 2,000 training images |
 | Requantization | Integer only: `clamp((acc · M + 2^23) >> 24, 0, 127)`; the clamp at 0 is the ReLU |
 | Accuracy, 10K test set (Python) | Float 97.6%, INT8 97.57% |
+
+The [training and export notebook](app/mnist_small.ipynb) trains on 60,000 MNIST images, evaluates the float and INT8 models on the 10,000-image test set, and exports weights and layer-by-layer reference outputs for the first 100 test images.
+
+| Layer | Output shape (excluding batch) | Trainable parameters |
+|---|---:|---:|
+| Reshape | 28 × 28 × 1 | 0 |
+| Conv2D, 8 valid 3 × 3 filters, ReLU | 26 × 26 × 8 | 80 |
+| Max pooling, 2 × 2 | 13 × 13 × 8 | 0 |
+| Conv2D, 8 valid 3 × 3 filters, ReLU | 11 × 11 × 8 | 584 |
+| Max pooling, 2 × 2 | 5 × 5 × 8 | 0 |
+| Flatten | 200 | 0 |
+| Dense logits | 10 | 2,010 |
+| **Total** | | **2,674** |
+
+[Keras model summary](docs/media/mnist_model_summary.png) · [Model architecture diagram](docs/media/mnist_model_architecture.png)
 
 ### Who does what
 
